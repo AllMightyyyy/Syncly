@@ -82,4 +82,8 @@ public class User {
          */
         USER
     }
+
+    private String resetPasswordToken;
+
+    private LocalDateTime resetPasswordExpiresAt;
 }

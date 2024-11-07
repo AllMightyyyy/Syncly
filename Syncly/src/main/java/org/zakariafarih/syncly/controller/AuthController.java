@@ -17,7 +17,13 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.UUID;
 
+/**
+ * Controller for handling authentication-related requests.
+ */
 @RestController
 @RequestMapping("/api/v1/auth")
 public class AuthController {
@@ -37,6 +43,15 @@ public class AuthController {
     @Autowired
     private RefreshTokenService refreshTokenService;
 
+    @Autowired
+    private EmailService emailService;
+
+    /**
+     * Registers a new user.
+     *
+     * @param signUpRequest the signup request containing user details
+     * @return a response entity indicating the result of the registration
+     */
     @PostMapping("/signup")
     public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signUpRequest) {
         if (userRepository.existsByUsername(signUpRequest.getUsername())) {
@@ -64,6 +79,12 @@ public class AuthController {
         return ResponseEntity.ok("User registered successfully!");
     }
 
+    /**
+     * Authenticates a user and generates a JWT token.
+     *
+     * @param loginRequest the login request containing username/email and password
+     * @return a response entity containing the JWT token and refresh token
+     */
     @PostMapping("/login")
     public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
         try {
@@ -85,6 +106,12 @@ public class AuthController {
         }
     }
 
+    /**
+     * Refreshes the JWT token using a refresh token.
+     *
+     * @param request the token refresh request containing the refresh token
+     * @return a response entity containing the new JWT token
+     */
     @PostMapping("/refresh-token")
     public ResponseEntity<?> refreshToken(@Valid @RequestBody TokenRefreshRequest request) {
         String requestRefreshToken = request.getRefreshToken();
@@ -99,9 +126,65 @@ public class AuthController {
                 .orElseThrow(() -> new RuntimeException("Refresh token is not in database!"));
     }
 
+    /**
+     * Logs out a user by deleting the refresh token.
+     *
+     * @param logoutRequest the logout request containing the refresh token
+     * @return a response entity indicating the result of the logout
+     */
     @PostMapping("/logout")
     public ResponseEntity<?> logoutUser(@Valid @RequestBody LogoutRequest logoutRequest) {
         refreshTokenService.deleteByToken(logoutRequest.getRefreshToken());
         return ResponseEntity.ok("User logged out successfully!");
+    }
+
+    /**
+     * Requests a password reset by sending a reset link to the user's email.
+     *
+     * @param request the password reset request containing the user's email
+     * @return a response entity indicating the result of the request
+     */
+    @PostMapping("/request-password-reset")
+    public ResponseEntity<?> requestPasswordReset(@Valid @RequestBody PasswordResetRequest request) {
+        Optional<User> userOptional = userService.findByEmail(request.getEmail());
+        if (!userOptional.isPresent()) {
+            return ResponseEntity.ok("If that email address is in our system, we have sent a password reset link to it.");
+        }
+
+        User user = userOptional.get();
+        String token = UUID.randomUUID().toString();
+        user.setResetPasswordExpiresAt(LocalDateTime.now().plusHours(1));
+        userRepository.save(user);
+
+        emailService.sendPasswordResetEmail(user.getEmail(), token);
+
+        return ResponseEntity.ok("If that email address is in our system, we have sent a password reset link to it.");
+    }
+
+    /**
+     * Resets the user's password using a valid reset token.
+     *
+     * @param request the set new password request containing the reset token and new password
+     * @return a response entity indicating the result of the password reset
+     */
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@Valid @RequestBody SetNewPasswordRequest request) {
+        Optional<User> userOptional = userRepository.findByResetPasswordToken(request.getToken());
+        if (!userOptional.isPresent()) {
+            return ResponseEntity.ok("That password reset link is Invalid or Expired.");
+        }
+
+        User user = userOptional.get();
+        if (user.getResetPasswordExpiresAt().isBefore(LocalDateTime.now())) {
+            return ResponseEntity.ok("That password reset link has expired.");
+        }
+
+        // Update user's password since it's a valid token
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        user.setResetPasswordToken(null);
+        user.setResetPasswordExpiresAt(null);
+        userRepository.save(user);
+
+        return ResponseEntity.ok("Your password has been reset successfully and you can now login!");
     }
 }
