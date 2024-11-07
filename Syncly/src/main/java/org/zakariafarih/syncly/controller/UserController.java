@@ -1,5 +1,6 @@
 package org.zakariafarih.syncly.controller;
 
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -50,7 +51,7 @@ public class UserController {
      * @return the updated user profile response
      */
     @PutMapping("/{username}")
-    public ResponseEntity<UserProfileResponse> updateUserProfile(@PathVariable String username, @RequestBody UserProfileUpdateRequest request) {
+    public ResponseEntity<UserProfileResponse> updateUserProfile(@PathVariable String username,@Valid @RequestBody UserProfileUpdateRequest request) {
         Optional<User> userOptional = userRepository.findByUsername(username);
         if (userOptional.isPresent()) {
             User user = userOptional.get();
@@ -67,4 +68,6 @@ public class UserController {
             return ResponseEntity.notFound().build();
         }
     }
+
+    // TODO -> Implement 2FA , Implement Account deactivation / deletion , Implement Email Verification logic right now there is only a placeholder
 }

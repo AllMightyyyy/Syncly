@@ -32,6 +32,9 @@ public class Device {
     @Column(nullable = false)
     private DeviceType deviceType;
 
+    @Column(unique=true)
+    private String refreshToken;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 }

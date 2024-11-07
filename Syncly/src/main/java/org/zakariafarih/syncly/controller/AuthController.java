@@ -1,10 +1,12 @@
 package org.zakariafarih.syncly.controller;
 
 import jakarta.validation.Valid;
+import org.zakariafarih.syncly.model.Device;
 import org.zakariafarih.syncly.model.RefreshToken;
 import org.zakariafarih.syncly.model.User;
 import org.zakariafarih.syncly.payload.*;
 import org.zakariafarih.syncly.repository.UserRepository;
+import org.zakariafarih.syncly.service.DeviceService;
 import org.zakariafarih.syncly.service.EmailService;
 import org.zakariafarih.syncly.service.RefreshTokenService;
 import org.zakariafarih.syncly.util.JwtUtil;
@@ -49,6 +51,7 @@ public class AuthController {
 
     @Autowired
     private UserService userService;
+    private DeviceService deviceService;
 
     /**
      * Registers a new user.
@@ -102,9 +105,15 @@ public class AuthController {
             User user = userRepository.findByUsername(userDetails.getUsername())
                     .orElseThrow(() -> new RuntimeException("User not found"));
 
-            RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
+            String deviceRefreshToken = UUID.randomUUID().toString();
 
-            return ResponseEntity.ok(new JwtResponse(jwt, refreshToken.getToken()));
+            // Save or update the device with the new refresh token
+            Device device = deviceService.addOrUpdateDevice(user.getUsername(), loginRequest.getDeviceInfo(), loginRequest.getDeviceType(), deviceRefreshToken);
+
+            JwtResponse response = new JwtResponse(jwt, deviceRefreshToken);
+            response.setDeviceId(device.getId());
+
+            return ResponseEntity.ok(response);
         } catch (BadCredentialsException e) {
             return ResponseEntity.status(401).body("Error: Invalid username or password");
         }
@@ -138,7 +147,7 @@ public class AuthController {
      */
     @PostMapping("/logout")
     public ResponseEntity<?> logoutUser(@Valid @RequestBody LogoutRequest logoutRequest) {
-        refreshTokenService.deleteByToken(logoutRequest.getRefreshToken());
+        deviceService.removeRefreshToken(logoutRequest.getRefreshToken());
         return ResponseEntity.ok("User logged out successfully!");
     }
 

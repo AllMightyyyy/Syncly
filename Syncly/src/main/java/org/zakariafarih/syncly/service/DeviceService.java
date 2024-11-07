@@ -69,4 +69,17 @@ public class DeviceService {
         }
         deviceRepository.delete(device);
     }
+
+    public Device addOrUpdateDevice(String username, String deviceName, DeviceType deviceType, String refreshToken) {
+        User user = userRepository.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found"));
+        Device device = deviceRepository.findByUserAndDeviceName(user, deviceName).orElse(Device.builder().user(user).deviceName(deviceName).deviceType(deviceType).build());
+        device.setRefreshToken(refreshToken);
+        return deviceRepository.save(device);
+    }
+
+    public void removeRefreshToken(String refreshToken) {
+        Device device = deviceRepository.findByRefreshToken(refreshToken).orElseThrow(() -> new RuntimeException("Invalid refresh token"));
+        device.setRefreshToken(null);
+        deviceRepository.save(device);
+    }
 }
