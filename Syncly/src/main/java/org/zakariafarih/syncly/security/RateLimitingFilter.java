@@ -3,8 +3,10 @@ package org.zakariafarih.syncly.security;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.Refill;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.zakariafarih.syncly.util.JwtUtil;
 
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
@@ -18,6 +20,9 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RateLimitingFilter extends OncePerRequestFilter {
 
     private final ConcurrentHashMap<String, Bucket> cache = new ConcurrentHashMap<>();
+
+    @Autowired
+    private JwtUtil jwtUtil;
 
     private Bucket createNewBucket() {
         Refill refill = Refill.greedy(5, Duration.ofMinutes(1));
@@ -34,8 +39,16 @@ public class RateLimitingFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(jakarta.servlet.http.HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response, jakarta.servlet.FilterChain filterChain) throws jakarta.servlet.ServletException, IOException {
-        String ip = request.getRemoteAddr();
-        Bucket bucket = cache.computeIfAbsent(ip, k -> createNewBucket());
+        String key;
+        String authorizationHeader = request.getHeader("Authorization");
+        if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
+            String token = authorizationHeader.substring(7);
+            key = jwtUtil.extractUsername(token);
+        } else {
+            key = request.getRemoteAddr();
+        }
+
+        Bucket bucket = cache.computeIfAbsent(key, k -> createNewBucket());
 
         if (bucket.tryConsume(1)) {
             filterChain.doFilter(request, response);

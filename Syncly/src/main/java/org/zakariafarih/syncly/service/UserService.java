@@ -2,6 +2,7 @@ package org.zakariafarih.syncly.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.zakariafarih.syncly.exception.UserNotFoundException;
 import org.zakariafarih.syncly.model.User;
 import org.zakariafarih.syncly.repository.UserRepository;
 
@@ -39,8 +40,8 @@ public class UserService {
     }
 
     public Optional<User> findByUsername(String username) {
-        return userRepository.findByUsername(username);
+        return Optional.ofNullable(userRepository.findByUsername(username)
+                .orElseThrow(() -> new UserNotFoundException("User not found with username: " + username)));
     }
-
 
 }

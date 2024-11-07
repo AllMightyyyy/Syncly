@@ -4,7 +4,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Cipher;
+import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import java.util.Base64;
 
 /**
@@ -16,42 +20,47 @@ public class EncryptionUtil {
     @Value("${encryption.key}")
     private String encryptionKey;
 
-    private static final String ALGORITHM = "AES";
-
-    /**
-     * Encrypts the given plain text using AES algorithm.
-     *
-     * @param plainText the text to be encrypted
-     * @return the encrypted text encoded in Base64
-     * @throws RuntimeException if an error occurs during encryption
-     */
     public String encrypt(String plainText) {
         try {
-            SecretKeySpec key = new SecretKeySpec(encryptionKey.getBytes(), ALGORITHM);
-            Cipher cipher = Cipher.getInstance(ALGORITHM);
-            cipher.init(Cipher.ENCRYPT_MODE, key);
-            byte[] encrypted = cipher.doFinal(plainText.getBytes());
-            return Base64.getEncoder().encodeToString(encrypted);
+            byte[] iv = new byte[12];
+            SecureRandom secureRandom = new SecureRandom();
+            secureRandom.nextBytes(iv);
+
+            GCMParameterSpec parameterSpec = new GCMParameterSpec(128, iv);
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            SecretKeySpec keySpec = new SecretKeySpec(encryptionKey.getBytes(), "AES");
+            cipher.init(Cipher.ENCRYPT_MODE, keySpec, parameterSpec);
+
+            byte[] cipherText = cipher.doFinal(plainText.getBytes(StandardCharsets.UTF_8));
+
+            // Combine IV and cipherText
+            ByteBuffer byteBuffer = ByteBuffer.allocate(iv.length + cipherText.length);
+            byteBuffer.put(iv);
+            byteBuffer.put(cipherText);
+            return Base64.getEncoder().encodeToString(byteBuffer.array());
         } catch (Exception e) {
             throw new RuntimeException("Error occurred during encryption", e);
         }
     }
 
-    /**
-     * Decrypts the given cipher text using AES algorithm.
-     *
-     * @param cipherText the text to be decrypted, encoded in Base64
-     * @return the decrypted plain text
-     * @throws RuntimeException if an error occurs during decryption
-     */
     public String decrypt(String cipherText) {
         try {
-            SecretKeySpec key = new SecretKeySpec(encryptionKey.getBytes(), ALGORITHM);
-            Cipher cipher = Cipher.getInstance(ALGORITHM);
-            cipher.init(Cipher.DECRYPT_MODE, key);
             byte[] decoded = Base64.getDecoder().decode(cipherText);
-            byte[] decrypted = cipher.doFinal(decoded);
-            return new String(decrypted);
+            ByteBuffer byteBuffer = ByteBuffer.wrap(decoded);
+
+            byte[] iv = new byte[12];
+            byteBuffer.get(iv);
+
+            byte[] cipherBytes = new byte[byteBuffer.remaining()];
+            byteBuffer.get(cipherBytes);
+
+            GCMParameterSpec parameterSpec = new GCMParameterSpec(128, iv);
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            SecretKeySpec keySpec = new SecretKeySpec(encryptionKey.getBytes(), "AES");
+            cipher.init(Cipher.DECRYPT_MODE, keySpec, parameterSpec);
+
+            byte[] plainText = cipher.doFinal(cipherBytes);
+            return new String(plainText, StandardCharsets.UTF_8);
         } catch (Exception e) {
             throw new RuntimeException("Error occurred during decryption", e);
         }

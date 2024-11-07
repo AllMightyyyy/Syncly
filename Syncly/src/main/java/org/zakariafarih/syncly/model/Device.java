@@ -35,6 +35,9 @@ public class Device {
     @Column(unique=true)
     private String refreshToken;
 
+    @Column
+    private LocalDateTime refreshTokenExpiryDate;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 }
