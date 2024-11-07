@@ -5,7 +5,7 @@ import org.zakariafarih.syncly.model.RefreshToken;
 import org.zakariafarih.syncly.model.User;
 import org.zakariafarih.syncly.payload.*;
 import org.zakariafarih.syncly.repository.UserRepository;
-import org.zakariafarih.syncly.security.RefreshTokenService;
+import org.zakariafarih.syncly.service.RefreshTokenService;
 import org.zakariafarih.syncly.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
