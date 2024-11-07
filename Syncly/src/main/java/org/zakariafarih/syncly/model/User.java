@@ -73,6 +73,11 @@ public class User {
     @UpdateTimestamp
     private LocalDateTime updatedAt;
 
+    @Column(nullable = false)
+    private boolean IsEmailVerified = false;
+
+    private String emailVerificationToken;
+
     /**
      * Enum representing the role of the User.
      */
@@ -91,4 +96,12 @@ public class User {
     private String resetPasswordToken;
 
     private LocalDateTime resetPasswordExpiresAt;
+
+    @Column(nullable = false)
+    private boolean IsActive = true;
+
+    private String twoFactorSecret;
+
+    @Column(nullable = false)
+    private boolean IsTwoFactorEnabled = false;
 }

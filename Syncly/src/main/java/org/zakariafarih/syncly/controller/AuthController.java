@@ -1,14 +1,18 @@
 package org.zakariafarih.syncly.controller;
 
 import jakarta.validation.Valid;
+import org.jboss.aerogear.security.otp.Totp;
 import org.zakariafarih.syncly.model.Device;
+import org.zakariafarih.syncly.model.DeviceType;
 import org.zakariafarih.syncly.model.RefreshToken;
 import org.zakariafarih.syncly.model.User;
 import org.zakariafarih.syncly.payload.*;
+import org.zakariafarih.syncly.repository.DeviceRepository;
 import org.zakariafarih.syncly.repository.UserRepository;
 import org.zakariafarih.syncly.service.DeviceService;
 import org.zakariafarih.syncly.service.EmailService;
 import org.zakariafarih.syncly.service.RefreshTokenService;
+import org.zakariafarih.syncly.service.UserService;
 import org.zakariafarih.syncly.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -35,9 +39,6 @@ public class AuthController {
     private AuthenticationManager authenticationManager;
 
     @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Autowired
@@ -51,7 +52,12 @@ public class AuthController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
     private DeviceService deviceService;
+
+    @Autowired
+    private DeviceRepository deviceRepository;
 
     /**
      * Registers a new user.
@@ -61,17 +67,15 @@ public class AuthController {
      */
     @PostMapping("/signup")
     public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signUpRequest) {
-        if (userRepository.existsByUsername(signUpRequest.getUsername())) {
-            return ResponseEntity
-                    .badRequest()
-                    .body("Error: Username is already taken!");
+        if (userService.findByUsername(signUpRequest.getUsername()).isPresent()) {
+            return ResponseEntity.badRequest().body("Error: Username is already taken!");
         }
 
-        if (userRepository.existsByEmail(signUpRequest.getEmail())) {
-            return ResponseEntity
-                    .badRequest()
-                    .body("Error: Email is already in use!");
+        if (userService.findByEmail(signUpRequest.getEmail()).isPresent()) {
+            return ResponseEntity.badRequest().body("Error: Email is already in use!");
         }
+
+        String verificationToken = UUID.randomUUID().toString();
 
         // Create new user's account
         User user = User.builder()
@@ -79,11 +83,15 @@ public class AuthController {
                 .email(signUpRequest.getEmail())
                 .passwordHash(passwordEncoder.encode(signUpRequest.getPassword()))
                 .role(User.Role.USER)
+                .IsEmailVerified(false)
+                .emailVerificationToken(verificationToken)
                 .build();
 
-        userRepository.save(user);
+        userService.saveUser(user);
 
-        return ResponseEntity.ok("User registered successfully!");
+        emailService.sendEmailVerificationEmail(user.getEmail(), verificationToken);
+
+        return ResponseEntity.ok("User registered successfully! Please check your email to verify your account.");
     }
 
     /**
@@ -94,6 +102,17 @@ public class AuthController {
      */
     @PostMapping("/login")
     public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
+        Optional<User> userOptional = userService.findByUsernameOrEmail(loginRequest.getUsernameOrEmail());
+        if (!userOptional.isPresent()) {
+            return ResponseEntity.status(401).body("Error: Invalid username or password");
+        }
+
+        User user = userOptional.get();
+
+        if (!user.isIsEmailVerified()) {
+            return ResponseEntity.status(403).body("Error: Email address not verified. Please check your email.");
+        }
+
         try {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(loginRequest.getUsernameOrEmail(), loginRequest.getPassword())
@@ -102,13 +121,15 @@ public class AuthController {
             UserDetails userDetails = (UserDetails) authentication.getPrincipal();
             String jwt = jwtUtil.generateToken(userDetails.getUsername());
 
-            User user = userRepository.findByUsername(userDetails.getUsername())
-                    .orElseThrow(() -> new RuntimeException("User not found"));
+            if (user.isIsTwoFactorEnabled()) {
+                // Require 2FA code verification
+                return ResponseEntity.status(206).body(new TwoFactorRequiredResponse("2FA code required", user.getUsername()));
+            }
 
             String deviceRefreshToken = UUID.randomUUID().toString();
 
             // Save or update the device with the new refresh token
-            Device device = deviceService.addOrUpdateDevice(user.getUsername(), loginRequest.getDeviceInfo(), loginRequest.getDeviceType(), deviceRefreshToken);
+            Device device = deviceService.addOrUpdateDevice(user.getUsername(), loginRequest.getDeviceInfo(), DeviceType.valueOf(loginRequest.getDeviceType()), deviceRefreshToken);
 
             JwtResponse response = new JwtResponse(jwt, deviceRefreshToken);
             response.setDeviceId(device.getId());
@@ -129,14 +150,12 @@ public class AuthController {
     public ResponseEntity<?> refreshToken(@Valid @RequestBody TokenRefreshRequest request) {
         String requestRefreshToken = request.getRefreshToken();
 
-        return refreshTokenService.findByToken(requestRefreshToken)
-                .map(refreshTokenService::verifyExpiration)
-                .map(RefreshToken::getUser)
-                .map(user -> {
-                    String token = jwtUtil.generateToken(user.getUsername());
-                    return ResponseEntity.ok(new JwtResponse(token, requestRefreshToken));
-                })
-                .orElseThrow(() -> new RuntimeException("Refresh token is not in database!"));
+        Device device = deviceRepository.findByRefreshToken(requestRefreshToken)
+                .orElseThrow(() -> new RuntimeException("Invalid refresh token"));
+
+        String token = jwtUtil.generateToken(device.getUser().getUsername());
+
+        return ResponseEntity.ok(new JwtResponse(token, requestRefreshToken));
     }
 
     /**
@@ -166,8 +185,9 @@ public class AuthController {
 
         User user = userOptional.get();
         String token = UUID.randomUUID().toString();
+        user.setResetPasswordToken(token);
         user.setResetPasswordExpiresAt(LocalDateTime.now().plusHours(1));
-        userRepository.save(user);
+        userService.saveUser(user);
 
         emailService.sendPasswordResetEmail(user.getEmail(), token);
 
@@ -182,7 +202,7 @@ public class AuthController {
      */
     @PostMapping("/reset-password")
     public ResponseEntity<?> resetPassword(@Valid @RequestBody SetNewPasswordRequest request) {
-        Optional<User> userOptional = userRepository.findByResetPasswordToken(request.getToken());
+        Optional<User> userOptional = userService.findByResetPasswordToken(request.getToken());
         if (!userOptional.isPresent()) {
             return ResponseEntity.ok("That password reset link is Invalid or Expired.");
         }
@@ -196,8 +216,62 @@ public class AuthController {
         user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
         user.setResetPasswordToken(null);
         user.setResetPasswordExpiresAt(null);
-        userRepository.save(user);
+        userService.saveUser(user);
 
         return ResponseEntity.ok("Your password has been reset successfully and you can now login!");
     }
+
+    @GetMapping("/verify-email")
+    public ResponseEntity<?> verifyEmail(@RequestParam("token") String token) {
+        Optional<User> userOptional = userService.findByEmailVerificationToken(token);
+        if (!userOptional.isPresent()) {
+            return ResponseEntity.badRequest().body("Invalid or expired email verification token!");
+        }
+        User user = userOptional.get();
+        user.setIsEmailVerified(true);
+        user.setEmailVerificationToken(null);
+        userService.saveUser(user);
+
+        return ResponseEntity.ok("Email verified successfully! You can now log in.");
+    }
+
+    @PostMapping("/verify-2fa")
+    public ResponseEntity<?> verifyTwoFactorCode(@Valid @RequestBody TwoFactorVerifyRequest request) {
+        Optional<User> userOptional = userService.findByUsername(request.getUsername());
+        if (!userOptional.isPresent()) {
+            return ResponseEntity.status(401).body("Invalid username or 2FA code.");
+        }
+
+        User user = userOptional.get();
+
+        if (!user.isIsTwoFactorEnabled()) {
+            return ResponseEntity.badRequest().body("2FA is not enabled for this account.");
+        }
+
+        boolean isCodeValid = verifyTwoFactorCode(user.getTwoFactorSecret(), request.getCode());
+
+        if (!isCodeValid) {
+            return ResponseEntity.status(401).body("Invalid 2FA code.");
+        }
+
+        // Generate JWT token
+        String jwt = jwtUtil.generateToken(user.getUsername());
+
+        // Generate refresh token and handle device info as before
+        String deviceRefreshToken = UUID.randomUUID().toString();
+
+        // Save or update the device with the new refresh token
+        Device device = deviceService.addOrUpdateDevice(user.getUsername(), request.getDeviceInfo(), request.getDeviceType(), deviceRefreshToken);
+
+        JwtResponse response = new JwtResponse(jwt, deviceRefreshToken);
+        response.setDeviceId(device.getId());
+
+        return ResponseEntity.ok(response);
+    }
+
+    private boolean verifyTwoFactorCode(String secret, String code) {
+        Totp totp = new Totp(secret);
+        return totp.verify(code);
+    }
+
 }

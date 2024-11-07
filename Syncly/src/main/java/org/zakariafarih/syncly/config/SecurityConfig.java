@@ -2,14 +2,15 @@ package org.zakariafarih.syncly.config;
 
 import org.zakariafarih.syncly.security.JwtAuthenticationEntryPoint;
 import org.zakariafarih.syncly.security.JwtRequestFilter;
+import org.zakariafarih.syncly.security.RateLimitingFilter;
 import org.zakariafarih.syncly.service.CustomUserDetailsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -33,6 +34,9 @@ public class SecurityConfig {
     @Autowired
     private JwtRequestFilter jwtRequestFilter;
 
+    @Autowired
+    private RateLimitingFilter rateLimitingFilter; // Ensure this is properly declared
+
     /**
      * Bean for password encoding using BCrypt.
      *
@@ -46,19 +50,13 @@ public class SecurityConfig {
     /**
      * Bean for configuring the AuthenticationManager.
      *
-     * @param http the HttpSecurity instance
-     * @param passwordEncoder the PasswordEncoder instance
-     * @param userDetailsService the CustomUserDetailsService instance
+     * @param authenticationConfiguration the AuthenticationConfiguration instance
      * @return an AuthenticationManager instance
      * @throws Exception if an error occurs during configuration
      */
     @Bean
-    public AuthenticationManager authenticationManager(HttpSecurity http, PasswordEncoder passwordEncoder, CustomUserDetailsService userDetailsService) throws Exception {
-        return http.getSharedObject(AuthenticationManagerBuilder.class)
-                .userDetailsService(userDetailsService)
-                .passwordEncoder(passwordEncoder)
-                .and()
-                .build();
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration authenticationConfiguration) throws Exception {
+        return authenticationConfiguration.getAuthenticationManager();
     }
 
     /**
@@ -71,20 +69,21 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                .csrf().disable()
-                .authorizeHttpRequests()
-                .antMatchers("/api/v1/auth/**", "/oauth2/**", "/ws/**").permitAll()
-                .antMatchers("/api/v1/admin/**").hasRole("ADMIN")
-                .anyRequest().authenticated()
-                .and()
-                .oauth2Login()
-                .defaultSuccessUrl("/api/v1/auth/oauth2/loginSuccess", true)
-                .and()
-                .exceptionHandling()
-                .authenticationEntryPoint(jwtAuthenticationEntryPoint)
-                .and()
-                .sessionManagement()
-                .sessionCreationPolicy(SessionCreationPolicy.STATELESS);
+                .csrf(csrf -> csrf.disable())
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers("/api/v1/auth/**", "/oauth2/**", "/ws/**").permitAll()
+                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                        .anyRequest().authenticated()
+                )
+                .oauth2Login(oauth2 -> oauth2
+                        .defaultSuccessUrl("/api/v1/auth/oauth2/loginSuccess", true)
+                )
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint(jwtAuthenticationEntryPoint)
+                )
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                );
 
         http.addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class);
         http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);

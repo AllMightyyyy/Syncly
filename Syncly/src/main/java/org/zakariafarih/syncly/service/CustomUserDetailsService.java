@@ -1,5 +1,6 @@
 package org.zakariafarih.syncly.service;
 
+import org.springframework.security.authentication.DisabledException;
 import org.zakariafarih.syncly.model.User;
 import org.zakariafarih.syncly.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +36,9 @@ public class CustomUserDetailsService implements UserDetailsService {
         User user = userRepository.findByUsername(usernameOrEmail)
                 .orElseGet(() -> userRepository.findByEmail(usernameOrEmail)
                         .orElseThrow(() -> new UsernameNotFoundException("User not found with username or email: " + usernameOrEmail)));
+        if (!user.isIsActive()) {
+            throw new DisabledException("User account is disabled");
+        }
         return new org.springframework.security.core.userdetails.User(
                 user.getUsername(),
                 user.getPasswordHash(),
