@@ -3,6 +3,7 @@ package org.zakariafarih.syncly.payload;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+import org.zakariafarih.syncly.validation.ValidPassword;
 
 @Data
 public class SetNewPasswordRequest {
@@ -10,6 +11,6 @@ public class SetNewPasswordRequest {
     private String token;
 
     @NotBlank
-    @Size(min = 6, message = "Password must be at least 6 characters")
+    @ValidPassword
     private String newPassword;
 }

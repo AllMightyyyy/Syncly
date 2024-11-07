@@ -94,4 +94,18 @@ public class DeviceService {
         device.setRefreshTokenExpiryDate(null);
         deviceRepository.save(device);
     }
+
+    public Device validateRefreshToken(String refreshToken) {
+        Device device = deviceRepository.findByRefreshToken(refreshToken)
+                .orElseThrow(() -> new RuntimeException("Invalid refresh token"));
+
+        if (device.getRefreshTokenExpiryDate() == null || device.getRefreshTokenExpiryDate().isBefore(LocalDateTime.now())) {
+            device.setRefreshToken(null);
+            device.setRefreshTokenExpiryDate(null);
+            deviceRepository.save(device);
+            throw new RuntimeException("Refresh token has expired. Please log in again.");
+        }
+
+        return device;
+    }
 }

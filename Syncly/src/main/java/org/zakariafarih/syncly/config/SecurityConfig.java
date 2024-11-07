@@ -3,8 +3,6 @@ package org.zakariafarih.syncly.config;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -19,6 +17,7 @@ import org.springframework.web.filter.CorsFilter;
 import org.zakariafarih.syncly.security.JwtAuthenticationEntryPoint;
 import org.zakariafarih.syncly.security.JwtRequestFilter;
 import org.zakariafarih.syncly.security.RateLimitingFilter;
+import org.zakariafarih.syncly.security.WebSocketAuthInterceptor;
 import org.zakariafarih.syncly.service.CustomUserDetailsService;
 
 import java.util.Arrays;
@@ -26,9 +25,6 @@ import java.util.Arrays;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
-
-    @Autowired
-    private CustomUserDetailsService userDetailsService;
 
     @Autowired
     private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
@@ -39,6 +35,12 @@ public class SecurityConfig {
     @Autowired
     private RateLimitingFilter rateLimitingFilter;
 
+    @Autowired
+    private WebSocketAuthInterceptor webSocketAuthInterceptor;
+
+    @Autowired
+    private CustomUserDetailsService userDetailsService;
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         int saltLength = 16;       // 16 bytes
@@ -48,11 +50,6 @@ public class SecurityConfig {
         int iterations = 3;        // Increase for better security
 
         return new Argon2PasswordEncoder(saltLength, hashLength, parallelism, memory, iterations);
-    }
-
-    @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration authenticationConfiguration) throws Exception {
-        return authenticationConfiguration.getAuthenticationManager();
     }
 
     @Bean
@@ -77,15 +74,27 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
-                .oauth2Login(oauth2 -> oauth2
-                        .defaultSuccessUrl("/api/v1/auth/oauth2/loginSuccess", true)
-                )
-                .exceptionHandling(exception -> exception
-                        .authenticationEntryPoint(jwtAuthenticationEntryPoint)
-                )
-                .sessionManagement(session -> session
-                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                .headers(headers -> headers
+                        .contentSecurityPolicy(csp -> csp
+                                .policyDirectives("default-src 'self'"))
+                        .frameOptions(frameOptions -> frameOptions
+                                .sameOrigin())
+                        .httpStrictTransportSecurity(hsts -> hsts
+                                .includeSubDomains(true)
+                                .maxAgeInSeconds(31536000))
                 );
+
+        http.oauth2Login(oauth2 -> oauth2
+                .defaultSuccessUrl("/api/v1/auth/oauth2/loginSuccess", true)
+        );
+
+        http.exceptionHandling(exception -> exception
+                .authenticationEntryPoint(jwtAuthenticationEntryPoint)
+        );
+
+        http.sessionManagement(session -> session
+                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+        );
 
         http.addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class);
         http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
@@ -93,7 +102,6 @@ public class SecurityConfig {
         return http.build();
     }
 
-    // CorsFilter bean if you want to apply CORS settings globally across Spring context
     @Bean
     public CorsFilter corsFilter() {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
