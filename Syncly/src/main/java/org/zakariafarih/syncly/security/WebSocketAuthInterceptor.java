@@ -41,10 +41,11 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                         accessor.setUser(authentication);
                     }
                 } catch (Exception e) {
-                    // Optionally handle authentication failures
+                    // handle auth failures -> user s4lj logger after adding it
                 }
             }
         }
+
         return message;
     }
 }

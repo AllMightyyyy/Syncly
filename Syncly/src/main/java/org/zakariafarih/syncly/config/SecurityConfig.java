@@ -3,6 +3,9 @@ package org.zakariafarih.syncly.config;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -18,7 +21,9 @@ import org.zakariafarih.syncly.security.JwtAuthenticationEntryPoint;
 import org.zakariafarih.syncly.security.JwtRequestFilter;
 import org.zakariafarih.syncly.security.RateLimitingFilter;
 import org.zakariafarih.syncly.security.WebSocketAuthInterceptor;
+import org.zakariafarih.syncly.service.CustomOAuth2UserService;
 import org.zakariafarih.syncly.service.CustomUserDetailsService;
+import org.zakariafarih.syncly.service.UserService;
 
 import java.util.Arrays;
 
@@ -41,6 +46,13 @@ public class SecurityConfig {
     @Autowired
     private CustomUserDetailsService userDetailsService;
 
+    @Autowired
+    private CustomOAuth2UserService customOAuth2UserService;
+
+    @Autowired
+    @Lazy
+    private UserService userService;
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         int saltLength = 16;       // 16 bytes
@@ -54,52 +66,49 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http
-                .requiresChannel(channel -> channel.anyRequest().requiresSecure())
-                .cors(cors -> cors
-                        .configurationSource(request -> {
-                            CorsConfiguration config = new CorsConfiguration();
-                            config.setAllowedOrigins(Arrays.asList("https://frontenddomain.com")); // Replace with frontend domain
-                            config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-                            config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type"));
-                            config.setAllowCredentials(true);
-                            return config;
-                        })
-                )
-                .csrf(csrf -> csrf
-                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                )
-                .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/api/v1/auth/**", "/oauth2/**", "/ws/**").permitAll()
-                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
-                        .anyRequest().authenticated()
-                )
-                .headers(headers -> headers
-                        .contentSecurityPolicy(csp -> csp
-                                .policyDirectives("default-src 'self'"))
-                        .frameOptions(frameOptions -> frameOptions
-                                .sameOrigin())
-                        .httpStrictTransportSecurity(hsts -> hsts
-                                .includeSubDomains(true)
-                                .maxAgeInSeconds(31536000))
-                );
+        http.requiresChannel(channel -> channel.anyRequest().requiresSecure());
 
-        http.oauth2Login(oauth2 -> oauth2
-                .defaultSuccessUrl("/api/v1/auth/oauth2/loginSuccess", true)
+        http.cors(cors -> cors.configurationSource(request -> {
+            CorsConfiguration config = new CorsConfiguration();
+            config.setAllowedOrigins(Arrays.asList("https://frontenddomain.com")); // Replace with frontend domain
+            config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+            config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type"));
+            config.setAllowCredentials(true);
+            return config;
+        }));
+
+        http.csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()));
+
+        http.authorizeHttpRequests(authorize -> authorize
+                .requestMatchers("/api/v1/auth/**", "/oauth2/**", "/ws/**").permitAll()
+                .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                .anyRequest().authenticated()
         );
 
-        http.exceptionHandling(exception -> exception
-                .authenticationEntryPoint(jwtAuthenticationEntryPoint)
+        http.oauth2Login(oauth2 -> {
+            oauth2.userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService));
+            oauth2.defaultSuccessUrl("/api/v1/auth/oauth2/loginSuccess", true);
+        });
+
+        http.headers(headers -> headers
+                .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'"))
+                .frameOptions(frameOptions -> frameOptions.sameOrigin())
+                .httpStrictTransportSecurity(hsts -> hsts.includeSubDomains(true).maxAgeInSeconds(31536000))
         );
 
-        http.sessionManagement(session -> session
-                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-        );
-
+        http.exceptionHandling(exception -> exception.authenticationEntryPoint(jwtAuthenticationEntryPoint));
+        http.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
         http.addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class);
         http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(HttpSecurity http) throws Exception {
+        AuthenticationManagerBuilder builder = http.getSharedObject(AuthenticationManagerBuilder.class);
+        builder.userDetailsService(userDetailsService).passwordEncoder(passwordEncoder());
+        return builder.build();
     }
 
     @Bean

@@ -6,6 +6,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.Set;
 
 /**
  * Entity class representing a User.
@@ -104,4 +105,14 @@ public class User {
 
     @Column(nullable = false)
     private boolean IsTwoFactorEnabled = false;
+
+    // OAuth2 specific fields
+    private String provider; // e.g., google
+    private String providerId; // Unique ID from the OAuth2 provider
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<Device> devices;
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<PasswordHistory> passwordHistories;
 }

@@ -74,7 +74,7 @@ public class OAuth2Controller {
         return username;
     }
 
-    @PostMapping("/logout")
+    @PostMapping("/oauth2/logout")
     public ResponseEntity<?> logoutUser() {
         // Implement token revocation if necessary
         return ResponseEntity.ok("User logged out successfully!");
