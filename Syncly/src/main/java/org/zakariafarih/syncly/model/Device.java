@@ -6,10 +6,6 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
-/**
- * Entity class representing a device.
- * Maps to the "devices" table in the database.
- */
 @Entity
 @Table(name = "devices")
 @Data
@@ -21,6 +17,7 @@ public class Device {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // Existing fields
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
@@ -32,12 +29,12 @@ public class Device {
     @Column(nullable = false)
     private DeviceType deviceType;
 
-    @Column(unique=true)
+    @Column(unique = true)
     private String refreshToken;
-
-    @Column
-    private LocalDateTime refreshTokenExpiryDate;
 
     @CreationTimestamp
     private LocalDateTime createdAt;
+
+    @Column
+    private LocalDateTime refreshTokenExpiryDate;
 }

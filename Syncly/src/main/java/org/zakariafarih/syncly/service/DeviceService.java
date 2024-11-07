@@ -8,6 +8,7 @@ import org.zakariafarih.syncly.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -71,15 +72,26 @@ public class DeviceService {
     }
 
     public Device addOrUpdateDevice(String username, String deviceName, DeviceType deviceType, String refreshToken) {
-        User user = userRepository.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found"));
-        Device device = deviceRepository.findByUserAndDeviceName(user, deviceName).orElse(Device.builder().user(user).deviceName(deviceName).deviceType(deviceType).build());
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        Device device = deviceRepository.findByUserAndDeviceName(user, deviceName)
+                .orElse(Device.builder()
+                        .user(user)
+                        .deviceName(deviceName)
+                        .deviceType(deviceType)
+                        .build());
+
         device.setRefreshToken(refreshToken);
+        device.setRefreshTokenExpiryDate(LocalDateTime.now().plusDays(30)); // Set expiry date 30 days from now
         return deviceRepository.save(device);
     }
 
     public void removeRefreshToken(String refreshToken) {
-        Device device = deviceRepository.findByRefreshToken(refreshToken).orElseThrow(() -> new RuntimeException("Invalid refresh token"));
+        Device device = deviceRepository.findByRefreshToken(refreshToken)
+                .orElseThrow(() -> new RuntimeException("Invalid refresh token"));
         device.setRefreshToken(null);
+        device.setRefreshTokenExpiryDate(null);
         deviceRepository.save(device);
     }
 }

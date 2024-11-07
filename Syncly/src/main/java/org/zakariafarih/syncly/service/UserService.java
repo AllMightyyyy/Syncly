@@ -4,7 +4,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.zakariafarih.syncly.exception.UserNotFoundException;
 import org.zakariafarih.syncly.model.User;
+import org.zakariafarih.syncly.repository.DeviceRepository;
 import org.zakariafarih.syncly.repository.UserRepository;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
 
@@ -13,6 +15,14 @@ public class UserService {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private DeviceRepository deviceRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+
 
     public Optional<User> findByEmail(String email) {
         return userRepository.findByEmail(email);
@@ -44,4 +54,11 @@ public class UserService {
                 .orElseThrow(() -> new UserNotFoundException("User not found with username: " + username)));
     }
 
+    public void changePassword(String username, String newPassword) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+        deviceRepository.removeAllRefreshTokensByUser(user.getId());
+    }
 }

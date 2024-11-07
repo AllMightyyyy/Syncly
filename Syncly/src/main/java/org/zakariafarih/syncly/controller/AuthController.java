@@ -153,9 +153,24 @@ public class AuthController {
         Device device = deviceRepository.findByRefreshToken(requestRefreshToken)
                 .orElseThrow(() -> new RuntimeException("Invalid refresh token"));
 
+        // Check if the refresh token has expired
+        if (device.getRefreshTokenExpiryDate() == null || device.getRefreshTokenExpiryDate().isBefore(LocalDateTime.now())) {
+            device.setRefreshToken(null);
+            device.setRefreshTokenExpiryDate(null);
+            deviceRepository.save(device);
+            return ResponseEntity.status(403).body("Refresh token has expired. Please log in again.");
+        }
+
+        // Generate new JWT token
         String token = jwtUtil.generateToken(device.getUser().getUsername());
 
-        return ResponseEntity.ok(new JwtResponse(token, requestRefreshToken));
+        // Generate a new refresh token and expiry date
+        String newRefreshToken = UUID.randomUUID().toString();
+        device.setRefreshToken(newRefreshToken);
+        device.setRefreshTokenExpiryDate(LocalDateTime.now().plusDays(30));
+        deviceRepository.save(device);
+
+        return ResponseEntity.ok(new JwtResponse(token, newRefreshToken));
     }
 
     /**
