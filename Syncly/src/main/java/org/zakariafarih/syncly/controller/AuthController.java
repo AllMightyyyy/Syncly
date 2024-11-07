@@ -5,6 +5,7 @@ import org.zakariafarih.syncly.model.RefreshToken;
 import org.zakariafarih.syncly.model.User;
 import org.zakariafarih.syncly.payload.*;
 import org.zakariafarih.syncly.repository.UserRepository;
+import org.zakariafarih.syncly.service.EmailService;
 import org.zakariafarih.syncly.service.RefreshTokenService;
 import org.zakariafarih.syncly.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +46,9 @@ public class AuthController {
 
     @Autowired
     private EmailService emailService;
+
+    @Autowired
+    private UserService userService;
 
     /**
      * Registers a new user.

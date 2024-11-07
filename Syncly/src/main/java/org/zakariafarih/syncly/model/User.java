@@ -32,6 +32,11 @@ public class User {
     @Column(unique = true, nullable = false)
     private String username;
 
+    // TODO -> add displayName and avatarUrl to the database
+    private String displayName;
+
+    private String avatarUrl;
+
     /**
      * Email of the User.
      * Must be unique and not null.
