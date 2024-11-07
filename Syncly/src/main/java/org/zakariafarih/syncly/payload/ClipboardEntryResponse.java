@@ -5,7 +5,7 @@ import lombok.Data;
 @Data
 public class ClipboardEntryResponse {
     private Long id;
-    private String content; // TODO -> Need to be decrypted make sure it is
+    private String content;
     private String timestamp;
     private String deviceInfo;
 }

@@ -4,6 +4,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.zakariafarih.syncly.model.DeviceType;
 import org.zakariafarih.syncly.model.User;
+import org.zakariafarih.syncly.payload.JwtResponse;
 import org.zakariafarih.syncly.repository.UserRepository;
 import org.zakariafarih.syncly.service.DeviceService;
 import org.zakariafarih.syncly.util.JwtUtil;
@@ -15,8 +16,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Optional;
-
-// TODO -> this is a VERY SIMPLE OAUTH2 CONTROLLER, we need to handle VARIOUS SCENARIOS like duplicate usernames, store additional user information, ensure security best practices
 
 /**
  * Controller for handling OAuth2 authentication and generating JWT tokens.
@@ -34,14 +33,8 @@ public class OAuth2Controller {
     @Autowired
     private DeviceService deviceService;
 
-    /**
-     * Handles successful OAuth2 login, registers new users if necessary, and generates a JWT token.
-     *
-     * @param authentication the OAuth2 authentication token
-     * @return a JWT token in the format "Bearer <token>"
-     */
     @GetMapping("/oauth2/loginSuccess")
-    public String getLoginInfo(OAuth2AuthenticationToken authentication) {
+    public ResponseEntity<?> getLoginInfo(OAuth2AuthenticationToken authentication) {
         OAuth2User oAuth2User = authentication.getPrincipal();
         String email = oAuth2User.getAttribute("email");
         String name = oAuth2User.getAttribute("name");
@@ -52,29 +45,38 @@ public class OAuth2Controller {
         if (userOpt.isPresent()) {
             user = userOpt.get();
         } else {
-            // Register new user
+            String username = generateUniqueUsername(name);
             user = User.builder()
-                    .username(name.replaceAll(" ", "_").toLowerCase())
+                    .username(username)
                     .email(email)
-                    .passwordHash("") // Password not used for OAuth2 users
                     .role(User.Role.USER)
                     .build();
             userRepository.save(user);
         }
 
         // Register device
-        deviceService.addDevice(user.getUsername(), deviceInfo, DeviceType.WEB); // Adjust DeviceType as needed
+        deviceService.addDevice(user.getUsername(), deviceInfo, DeviceType.WEB);
 
         // Generate JWT token
         String token = jwtUtil.generateToken(user.getUsername());
 
-        return "Bearer " + token;
+        return ResponseEntity.ok(new JwtResponse(token, null));
+    }
+
+    private String generateUniqueUsername(String name) {
+        String baseUsername = name.replaceAll(" ", "_").toLowerCase();
+        String username = baseUsername;
+        int counter = 1;
+        while (userRepository.existsByUsername(username)) {
+            username = baseUsername + counter;
+            counter++;
+        }
+        return username;
     }
 
     @PostMapping("/logout")
     public ResponseEntity<?> logoutUser() {
-        // TODO -> Token blacklist implementation
+        // Implement token revocation if necessary
         return ResponseEntity.ok("User logged out successfully!");
     }
-
 }
