@@ -1,10 +1,13 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'https://localhost:8081/api/v1'; // Replace with your backend URL
+const API_BASE_URL = 'http://localhost:8081/api/v1'; // Replace with your backend URL
 
 const api = axios.create({
     baseURL: API_BASE_URL,
-    withCredentials: true, // Include cookies for refresh tokens
+    headers: {
+        'Content-Type': 'application/json',
+    },
+    withCredentials: false, // Include cookies for refresh tokens
 });
 
 // Function to get the CSRF token from cookies

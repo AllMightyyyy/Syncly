@@ -19,11 +19,11 @@ const ClipboardRealTime: React.FC = () => {
         if (!user) return;
 
         const client = new Client({
-            brokerURL: 'wss://localhost:8081/ws', // Replace with your backend WebSocket URL
+            brokerURL: 'wss://localhost:8081/ws', // Replace with backend WebSocket URL
             connectHeaders: {
                 Authorization: `Bearer ${localStorage.getItem('jwtToken')}`,
             },
-            webSocketFactory: () => new SockJS('https://localhost:8081/ws'),
+            webSocketFactory: () => new SockJS('http://localhost:8081/ws'),
             onConnect: () => {
                 client.subscribe(`/topic/clipboard/${user.username}`, (message) => {
                     const body: ClipboardMessage = JSON.parse(message.body);

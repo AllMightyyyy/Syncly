@@ -34,7 +34,8 @@ public class UserService {
 
     public Optional<User> findByUsernameOrEmail(String usernameOrEmail) {
         return userRepository.findByUsername(usernameOrEmail)
-                .or(() -> userRepository.findByEmail(usernameOrEmail));
+                .or(() -> userRepository.findByEmail(usernameOrEmail))
+                .filter(user -> user.getUsername() != null && user.getEmail() != null); // Ensure non-null username/email
     }
 
     public Optional<User> findByResetPasswordToken(String token) {
@@ -54,8 +55,12 @@ public class UserService {
     }
 
     public Optional<User> findByUsername(String username) {
-        return Optional.ofNullable(userRepository.findByUsername(username)
-                .orElseThrow(() -> new UserNotFoundException("User not found with username: " + username)));
+        return userRepository.findByUsername(username);
+    }
+
+    public User getUserByUsername(String username) {
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new UserNotFoundException("User not found with username: " + username));
     }
 
     public void changePassword(String username, String newPassword) {

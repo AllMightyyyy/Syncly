@@ -99,7 +99,7 @@ public class User {
     private LocalDateTime resetPasswordExpiresAt;
 
     @Column(nullable = false)
-    private boolean IsActive = true;
+    private boolean IsActive = false;
 
     private String twoFactorSecret;
 

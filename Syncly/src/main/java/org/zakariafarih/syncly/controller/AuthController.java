@@ -8,7 +8,7 @@ import org.jboss.aerogear.security.otp.Totp;
 import org.zakariafarih.syncly.model.*;
 import org.zakariafarih.syncly.payload.*;
 import org.zakariafarih.syncly.repository.DeviceRepository;
-import org.zakariafarih.syncly.repository.UserRepository;
+import org.zakariafarih.syncly.payload.SignupRequest;
 import org.zakariafarih.syncly.service.DeviceService;
 import org.zakariafarih.syncly.service.EmailService;
 import org.zakariafarih.syncly.service.RefreshTokenService;
@@ -25,6 +25,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -67,37 +68,44 @@ public class AuthController {
      */
     @PostMapping("/signup")
     public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signUpRequest) {
+        // Check for duplicate username and email
         if (userService.findByUsername(signUpRequest.getUsername()).isPresent()) {
             return ResponseEntity.badRequest().body("Error: Username is already taken!");
         }
-
         if (userService.findByEmail(signUpRequest.getEmail()).isPresent()) {
             return ResponseEntity.badRequest().body("Error: Email is already in use!");
         }
 
+        // Generate verification token
         String verificationToken = UUID.randomUUID().toString();
 
-        // Create new user's account
+        // Initialize user with all required attributes and defaults
         User user = User.builder()
                 .username(signUpRequest.getUsername())
+                .displayName(signUpRequest.getUsername()) // Set displayName to username initially
                 .email(signUpRequest.getEmail())
                 .passwordHash(passwordEncoder.encode(signUpRequest.getPassword()))
                 .role(User.Role.USER)
                 .IsEmailVerified(false)
+                .IsActive(false)
+                .IsTwoFactorEnabled(false)
                 .emailVerificationToken(verificationToken)
+                .avatarUrl("") // Empty string for avatar if no default is provided
+                .provider(null)
+                .providerId(null)
+                .twoFactorSecret(null)
+                .resetPasswordToken(null)
+                .resetPasswordExpiresAt(null)
+                .devices(new HashSet<>()) // Initialize relationships with empty sets
+                .passwordHistories(new HashSet<>())
                 .build();
 
+        // Save user and create password history
         userService.saveUser(user);
+        userService.savePasswordHistory(PasswordHistory.builder().user(user).passwordHash(user.getPasswordHash()).build());
 
-        // Add to password history
-        PasswordHistory passwordHistory = PasswordHistory.builder()
-                .user(user)
-                .passwordHash(user.getPasswordHash())
-                .build();
-        userService.savePasswordHistory(passwordHistory);
-
+        // Send verification email
         emailService.sendEmailVerificationEmail(user.getEmail(), verificationToken);
-
         return ResponseEntity.ok("User registered successfully! Please check your email to verify your account.");
     }
 
@@ -293,6 +301,7 @@ public class AuthController {
         }
         User user = userOptional.get();
         user.setIsEmailVerified(true);
+        user.setIsActive(true);
         user.setEmailVerificationToken(null);
         userService.saveUser(user);
 

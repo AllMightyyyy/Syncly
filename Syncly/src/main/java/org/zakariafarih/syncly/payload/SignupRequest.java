@@ -19,4 +19,8 @@ public class SignupRequest {
     @NotBlank
     @ValidPassword
     private String password;
+
+    // Optional display name
+    @Size(max = 50)
+    private String displayName; // Optional
 }
